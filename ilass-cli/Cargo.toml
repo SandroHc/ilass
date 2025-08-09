@@ -28,13 +28,14 @@ subparse = "0.7"
 
 byteorder = { version = "1.5", optional = true }
 clap = { version = "4.5", features = ["cargo"] }
+color-eyre = "0.6"
 encoding_rs = "0.8"
-failure = "0.1"
 ffmpeg-sys = { optional = true, git = "https://github.com/meh/rust-ffmpeg-sys", rev = "8e674faff68cb9fc5e064901133931c1c46b6c41" }
 libc = "0.2"
 pbr = "1.1"
 serde = { version = "1.0.98", features = ["derive", "rc"] }
 serde_json = "1.0"
+thiserror = "2.0"
 
 [dev-dependencies]
 rmp-serde = "1.3"

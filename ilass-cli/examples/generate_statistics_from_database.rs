@@ -3,7 +3,6 @@
 #![allow(clippy::too_many_arguments)]
 
 use clap::{Arg, command};
-use failure::{Backtrace, Context, Fail, ResultExt};
 use ilass_cli::*;
 use rmp_serde as rmps;
 use std::cmp::Ordering;
@@ -11,6 +10,7 @@ use std::cmp::{max, min};
 use std::collections::HashSet;
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
+use std::fmt::Display;
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::path::Path;
@@ -36,7 +36,9 @@ use std::sync::atomic::AtomicUsize;
 
 use threadpool::ThreadPool;
 
+use color_eyre::eyre::{Context, bail};
 use std::sync::{Arc, Mutex};
+use thiserror::Error;
 
 struct Task {
     context: TProgressInfo,
@@ -832,22 +834,12 @@ struct RunConfig {
     vad_config: VADConfig,
 }
 
-define_error!(TopLevelError, TopLevelErrorKind);
-
-pub enum TopLevelErrorKind {
+#[derive(Debug, Error)]
+pub enum TopLevelError {
+    #[error("error reading video file `{path}`")]
     ErrorReadingVideoFile { path: PathBuf },
+    #[error("error serializing cache file")]
     SerializingCacheFailed {},
-}
-
-impl fmt::Display for TopLevelErrorKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            TopLevelErrorKind::ErrorReadingVideoFile { path } => {
-                write!(f, "error reading video file `{}`", path.display())
-            }
-            TopLevelErrorKind::SerializingCacheFailed {} => write!(f, "error serializing cache file"),
-        }
-    }
 }
 
 // threaded statistics and cache type
@@ -858,10 +850,17 @@ type TSubtitle = Arc<database::Subtitle>;
 type TMovie = Arc<database::Movie>;
 type TProgressInfo = Arc<ProgressContext>;
 
-fn perform_vad(movie: &database::Movie, cache: TCache) -> Result<Vec<Span>, TopLevelError> {
+fn perform_vad(movie: &database::Movie, cache: TCache) -> color_eyre::Result<Vec<Span>> {
     let vad_spans: Vec<Span>;
 
-    let vad_spans_opt: Option<Vec<Span>> = { cache.lock().unwrap().vad_spans.get(&movie.id).cloned() };
+    let vad_spans_opt: Option<Vec<Span>> = {
+        match cache.lock() {
+            Ok(guard) => guard.vad_spans.get(&movie.id).cloned(),
+            Err(err) => {
+                bail!("lock poisoned: {}", err);
+            }
+        }
+    };
 
     match vad_spans_opt {
         Some(v) => {
@@ -877,7 +876,7 @@ fn perform_vad(movie: &database::Movie, cache: TCache) -> Result<Vec<Span>, TopL
                     Some(format!("extracting audio from movie '{}'...", movie.path.display())),
                 ),*/
             )
-            .with_context(|_| TopLevelErrorKind::ErrorReadingVideoFile {
+            .wrap_err(TopLevelError::ErrorReadingVideoFile {
                 path: movie.path.clone(),
             })?;
 
@@ -1335,10 +1334,8 @@ fn get_distances_for_line_info_with_deltas(
         .collect::<Vec<i64>>()
 }*/
 
-fn print_ignore_error_for_movie(e: impl Into<failure::Error>, movie: &database::Movie) {
-    println!("<<<< Ignoring error for movie [{}; '{}']", movie.id, movie.name);
-    print_error_chain(e.into());
-    println!(">>>>");
+fn print_ignore_error_for_movie<E: Display>(e: E, movie: &database::Movie) {
+    println!("Ignoring error for movie [{}; '{}']: {e}", movie.id, movie.name);
 }
 
 type TDatabase = database::Root;
@@ -1435,7 +1432,7 @@ fn compute_sync_offsets(
     get_offsets(ref_sub_spans, &out_spans, line_pairs)
 }
 
-fn run() -> Result<(), TopLevelError> {
+fn main() -> color_eyre::Result<()> {
     let stop_request_prio: TStopRequestPrio = Arc::new(AtomicUsize::new(0));
     // save cache on ctrl-c
     {
@@ -2417,7 +2414,7 @@ fn run() -> Result<(), TopLevelError> {
             let file = File::create(cache_dir.join("cache.dat")).expect("cache file not found");
             let mut file_write = BufWriter::with_capacity(1024, file);
             rmps::encode::write_named(&mut file_write, &*cache.lock().unwrap())
-                .with_context(|_| TopLevelErrorKind::SerializingCacheFailed {})?;
+                .wrap_err(TopLevelError::SerializingCacheFailed {})?;
         }
 
         std::fs::create_dir_all(&output_dir).expect("failed to create statistics dir");
@@ -2571,16 +2568,6 @@ fn run() -> Result<(), TopLevelError> {
     println!("Done writing!");
 
     Ok(())
-}
-
-fn main() {
-    match run() {
-        Ok(_) => std::process::exit(0),
-        Err(error) => {
-            print_error_chain(error.into());
-            std::process::exit(1)
-        }
-    }
 }
 
 // interpreted by python script

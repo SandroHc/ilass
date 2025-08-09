@@ -12,7 +12,7 @@ pub use ffmpeg_binary::VideoDecoderFFmpegBinary as VideoDecoder;
 
 pub trait AudioReceiver {
     type Output;
-    type Error: failure::Fail;
+    type Error;
 
     /// Samples are in 8000kHz mono/single-channel format.
     fn push_samples(&mut self, samples: &[i16]) -> Result<(), Self::Error>;

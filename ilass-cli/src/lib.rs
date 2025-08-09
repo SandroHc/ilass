@@ -1,5 +1,6 @@
+use color_eyre::eyre::Context;
 use encoding_rs::Encoding;
-use failure::ResultExt;
+use errors::*;
 use ilass::{TimeDelta as AlgTimeDelta, TimePoint as AlgTimePoint, TimeSpan as AlgTimeSpan};
 use pbr::ProgressBar;
 use std::cmp::{max, min};
@@ -7,8 +8,6 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::result::Result;
-
-use errors::*;
 
 pub mod errors;
 pub mod video_decoder;
@@ -93,23 +92,22 @@ impl video_decoder::ProgressHandler for ProgressInfo {
     }
 }
 
-pub fn read_file_to_bytes(path: &Path) -> Result<Vec<u8>, FileOperationError> {
-    let mut file = File::open(path).with_context(|_| FileOperationErrorKind::FileOpen {
+pub fn read_file_to_bytes(path: &Path) -> color_eyre::Result<Vec<u8>> {
+    let mut file = File::open(path).wrap_err(FileOperationError::FileOpen {
         path: path.to_path_buf(),
     })?;
     let mut v = Vec::new();
-    file.read_to_end(&mut v)
-        .with_context(|_| FileOperationErrorKind::FileRead {
-            path: path.to_path_buf(),
-        })?;
+    file.read_to_end(&mut v).wrap_err(FileOperationError::FileRead {
+        path: path.to_path_buf(),
+    })?;
     Ok(v)
 }
 
-pub fn write_data_to_file(path: &Path, d: Vec<u8>) -> Result<(), FileOperationError> {
-    let mut file = File::create(path).with_context(|_| FileOperationErrorKind::FileOpen {
+pub fn write_data_to_file(path: &Path, d: Vec<u8>) -> color_eyre::Result<()> {
+    let mut file = File::create(path).wrap_err(FileOperationError::FileOpen {
         path: path.to_path_buf(),
     })?;
-    file.write_all(&d).with_context(|_| FileOperationErrorKind::FileWrite {
+    file.write_all(&d).wrap_err(FileOperationError::FileWrite {
         path: path.to_path_buf(),
     })?;
     Ok(())
@@ -185,19 +183,19 @@ impl SubtitleFileHandler {
         file_path: &Path,
         sub_encoding: Option<&'static Encoding>,
         sub_fps: f64,
-    ) -> Result<SubtitleFileHandler, InputSubtitleError> {
+    ) -> color_eyre::Result<SubtitleFileHandler> {
         let sub_data = read_file_to_bytes(file_path)
-            .with_context(|_| InputSubtitleErrorKind::ReadingSubtitleFileFailed(file_path.to_path_buf()))?;
+            .wrap_err(InputSubtitleError::ReadingSubtitleFileFailed(file_path.to_path_buf()))?;
 
         let file_format = get_subtitle_format_err(file_path.extension(), &sub_data)
-            .with_context(|_| InputSubtitleErrorKind::UnknownSubtitleFormat(file_path.to_path_buf()))?;
+            .map_err(|err| InputSubtitleError::UnknownSubtitleFormat(file_path.to_path_buf(), err))?;
 
         let parsed_subtitle_data: SubtitleFile = parse_bytes(file_format, &sub_data, sub_encoding, sub_fps)
-            .with_context(|_| InputSubtitleErrorKind::ParsingSubtitleFailed(file_path.to_path_buf()))?;
+            .map_err(|err| InputSubtitleError::ParsingSubtitleFailed(file_path.to_path_buf(), err))?;
 
         let subparse_timespans: Vec<TimeSpan> = parsed_subtitle_data
             .get_subtitle_entries()
-            .with_context(|_| InputSubtitleErrorKind::RetrievingSubtitleLinesFailed(file_path.to_path_buf()))?
+            .map_err(|err| InputSubtitleError::RetrievingSubtitleLinesFailed(file_path.to_path_buf(), err))?
             .into_iter()
             .map(|subentry| subentry.timespan)
             .map(|timespan: TimeSpan| {
@@ -242,7 +240,7 @@ impl VideoFileHandler {
         file_path: &Path,
         audio_index: Option<usize>,
         video_decode_progress: impl video_decoder::ProgressHandler,
-    ) -> Result<VideoFileHandler, InputVideoError> {
+    ) -> color_eyre::Result<VideoFileHandler, InputVideoError> {
         //video_decoder::VideoDecoder::decode(file_path, );
         use webrtc_vad::*;
 
@@ -262,7 +260,7 @@ impl VideoFileHandler {
                 let is_voice = self
                     .fvad
                     .is_voice_segment(samples)
-                    .map_err(|_| InputVideoErrorKind::VadAnalysisFailed)?;
+                    .map_err(|_| InputVideoError::VadAnalysisFailed)?;
 
                 self.vad_buffer.push(is_voice);
 
@@ -283,7 +281,7 @@ impl VideoFileHandler {
 
         let vad_buffer =
             video_decoder::VideoDecoder::decode(file_path, audio_index, chunk_processor, video_decode_progress)
-                .with_context(|_| InputVideoErrorKind::FailedToDecode {
+                .map_err(|_| InputVideoError::FailedToDecode {
                     path: PathBuf::from(file_path),
                 })?;
 
@@ -345,22 +343,20 @@ impl InputFileHandler {
         sub_encoding: Option<&'static Encoding>,
         sub_fps: f64,
         video_decode_progress: impl video_decoder::ProgressHandler,
-    ) -> Result<InputFileHandler, InputFileError> {
+    ) -> color_eyre::Result<InputFileHandler, InputFileError> {
         if let Some(extension) = file_path.extension().map(|os_str| os_str.to_string_lossy()) {
             let known_extensions = ["srt", "vob", "idx", "ass", "ssa", "sub"];
             if known_extensions.contains(&extension.as_ref()) {
-                return Ok(SubtitleFileHandler::open_sub_file(file_path, sub_encoding, sub_fps)
+                return SubtitleFileHandler::open_sub_file(file_path, sub_encoding, sub_fps)
                     .map(InputFileHandler::Subtitle)
-                    .with_context(|_| InputFileErrorKind::SubtitleFile(file_path.to_path_buf()))?);
+                    .map_err(|_| InputFileError::SubtitleFile(file_path.to_path_buf()));
             }
         }
 
         // Did not match any subtitle extensions we support, assume it's a video file.
-        Ok(
-            VideoFileHandler::open_video_file(file_path, audio_index, video_decode_progress)
-                .map(InputFileHandler::Video)
-                .with_context(|_| InputFileErrorKind::VideoFile(file_path.to_path_buf()))?,
-        )
+        VideoFileHandler::open_video_file(file_path, audio_index, video_decode_progress)
+            .map(InputFileHandler::Video)
+            .map_err(|_| InputFileError::VideoFile(file_path.to_path_buf()))
     }
 
     pub fn into_subtitle_file(self) -> Option<SubtitleFile> {
@@ -422,28 +418,4 @@ pub fn guess_fps_ratio(
     progress_handler.finish();
 
     (opt_idx, opt_delta)
-}
-
-pub fn print_error_chain(error: failure::Error) {
-    let show_bt_opt = std::env::vars()
-        .find(|(key, _)| key == "RUST_BACKTRACE")
-        .map(|(_, value)| value);
-    let show_bt = show_bt_opt.is_some() && show_bt_opt != Some("0".to_string());
-
-    println!("error: {}", error);
-    if show_bt {
-        println!("stack trace: {}", error.backtrace());
-    }
-
-    for cause in error.as_fail().iter_causes() {
-        println!("caused by: {}", cause);
-        if show_bt && let Some(backtrace) = cause.backtrace() {
-            println!("stack trace: {}", backtrace);
-        }
-    }
-
-    if !show_bt {
-        println!();
-        println!("not: run with environment variable 'RUST_BACKTRACE=1' for detailed stack traces");
-    }
 }

@@ -13,11 +13,9 @@ use crate::subparse::SubtitleFileInterface;
 
 use clap::{Arg, ArgAction, command};
 use encoding_rs::Encoding;
-use failure::ResultExt;
 use ilass::{TimeDelta as AlgTimeDelta, align};
 use std::ffi::OsStr;
 use std::path::PathBuf;
-use std::result::Result;
 use std::str::FromStr;
 
 use subparse::timetypes::*;
@@ -30,43 +28,40 @@ use ilass_cli::*;
 fn unpack_clap_number_f64(
     matches: &clap::ArgMatches,
     parameter_name: &'static str,
-) -> Result<f64, InputArgumentsError> {
+) -> color_eyre::Result<f64, InputArgumentsError> {
     let parameter_value_str: &String = matches.get_one(parameter_name).unwrap();
-    f64::from_str(parameter_value_str)
-        .with_context(|_| InputArgumentsErrorKind::ArgumentParseError {
-            argument_name: parameter_name.to_string(),
-            value: parameter_value_str.to_string(),
-        })
-        .map_err(InputArgumentsError::from)
+    f64::from_str(parameter_value_str).map_err(|_| InputArgumentsError::ArgumentParseError {
+        argument_name: parameter_name.to_string(),
+        value: parameter_value_str.to_string(),
+    })
 }
 
 /// Does reading, parsing and nice error handling for a f64 clap parameter.
 fn unpack_clap_number_i64(
     matches: &clap::ArgMatches,
     parameter_name: &'static str,
-) -> Result<i64, InputArgumentsError> {
+) -> color_eyre::Result<i64, InputArgumentsError> {
     let parameter_value_str: &String = matches.get_one(parameter_name).unwrap();
-    i64::from_str(parameter_value_str)
-        .with_context(|_| InputArgumentsErrorKind::ArgumentParseError {
-            argument_name: parameter_name.to_string(),
-            value: parameter_value_str.to_string(),
-        })
-        .map_err(InputArgumentsError::from)
+    i64::from_str(parameter_value_str).map_err(|_| InputArgumentsError::ArgumentParseError {
+        argument_name: parameter_name.to_string(),
+        value: parameter_value_str.to_string(),
+    })
 }
 
 fn unpack_optional_clap_number_usize(
     matches: &clap::ArgMatches,
     parameter_name: &'static str,
-) -> Result<Option<usize>, InputArgumentsError> {
+) -> color_eyre::Result<Option<usize>, InputArgumentsError> {
     match matches.get_one::<String>(parameter_name) {
         None => Ok(None),
-        Some(parameter_value_str) => usize::from_str(parameter_value_str)
-            .with_context(|_| InputArgumentsErrorKind::ArgumentParseError {
-                argument_name: parameter_name.to_string(),
-                value: parameter_value_str.to_string(),
-            })
-            .map(Some)
-            .map_err(InputArgumentsError::from),
+        Some(parameter_value_str) => {
+            usize::from_str(parameter_value_str)
+                .map(Some)
+                .map_err(|_| InputArgumentsError::ArgumentParseError {
+                    argument_name: parameter_name.to_string(),
+                    value: parameter_value_str.to_string(),
+                })
+        }
     }
 }
 
@@ -115,7 +110,7 @@ struct Arguments {
     audio_index: Option<usize>,
 }
 
-fn parse_args() -> Result<Arguments, InputArgumentsError> {
+fn parse_args() -> color_eyre::Result<Arguments> {
     let matches = command!()
         .arg(Arg::new("reference-file")
             .help("Path to the reference subtitle or video file")
@@ -201,7 +196,7 @@ fn parse_args() -> Result<Arguments, InputArgumentsError> {
 
     let interval: i64 = unpack_clap_number_i64(&matches, "interval")?;
     if interval < 1 {
-        return Err(InputArgumentsErrorKind::ExpectedPositiveNumber {
+        return Err(InputArgumentsError::ExpectedPositiveNumber {
             argument_name: "interval".to_string(),
             value: interval,
         }
@@ -211,7 +206,7 @@ fn parse_args() -> Result<Arguments, InputArgumentsError> {
     let split_penalty: f64 = unpack_clap_number_f64(&matches, "split-penalty")?;
     let split_penalty_range = 0.0..=1000.0;
     if !split_penalty_range.contains(&split_penalty) {
-        return Err(InputArgumentsErrorKind::ValueNotInRange {
+        return Err(InputArgumentsError::ValueNotInRange {
             argument_name: "split-penalty".to_string(),
             value: split_penalty,
             min: *split_penalty_range.start(),
@@ -222,7 +217,7 @@ fn parse_args() -> Result<Arguments, InputArgumentsError> {
 
     let speed_optimization: f64 = unpack_clap_number_f64(&matches, "speed-optimization")?;
     if speed_optimization < 0.0 {
-        return Err(InputArgumentsErrorKind::ExpectedNonNegativeNumber {
+        return Err(InputArgumentsError::ExpectedNonNegativeNumber {
             argument_name: "speed-optimization".to_string(),
             value: speed_optimization,
         }
@@ -253,7 +248,7 @@ fn parse_args() -> Result<Arguments, InputArgumentsError> {
     })
 }
 
-fn prepare_reference_file(args: &Arguments) -> Result<InputFileHandler, failure::Error> {
+fn prepare_reference_file(args: &Arguments) -> color_eyre::Result<InputFileHandler> {
     let mut ref_file = InputFileHandler::open(
         &args.reference_file_path,
         args.audio_index,
@@ -275,7 +270,8 @@ fn prepare_reference_file(args: &Arguments) -> Result<InputFileHandler, failure:
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////
 
-fn run() -> Result<(), failure::Error> {
+fn main() -> color_eyre::Result<()> {
+    color_eyre::install()?;
     let args = parse_args()?;
 
     if args.incorrect_file_path.eq(OsStr::new("_")) {
@@ -287,7 +283,7 @@ fn run() -> Result<(), failure::Error> {
         println!("this can be used as a debugging tool");
         println!();
 
-        let lines: Vec<(subparse::timetypes::TimeSpan, String)> = ref_file
+        let lines: Vec<(TimeSpan, String)> = ref_file
             .timespans()
             .iter()
             .cloned()
@@ -296,7 +292,7 @@ fn run() -> Result<(), failure::Error> {
             .collect();
 
         let debug_file =
-            subparse::SrtFile::create(lines).with_context(|_| TopLevelErrorKind::FailedToInstantiateSubtitleFile)?;
+            subparse::SrtFile::create(lines).map_err(|_| TopLevelError::FailedToInstantiateSubtitleFile)?;
 
         write_data_to_file(
             &args.output_file_path,
@@ -317,12 +313,11 @@ fn run() -> Result<(), failure::Error> {
     // this program internally stores the files in a non-destructable way (so
     // formatting is preserved) but has no abilty to convert between formats
     if !subparse::is_valid_extension_for_subtitle_format(args.output_file_path.extension(), output_file_format) {
-        return Err(TopLevelErrorKind::FileFormatMismatch {
+        return Err(TopLevelError::FileFormatMismatch {
             input_file_path: args.incorrect_file_path,
             output_file_path: args.output_file_path,
-            input_file_format: inc_file.file_format(),
+            input_file_format: PrintableSubtitleFormat(inc_file.file_format()),
         }
-        .into_error()
         .into());
     }
 
@@ -480,26 +475,14 @@ fn run() -> Result<(), failure::Error> {
     let mut correct_file = inc_file.into_subtitle_file();
     correct_file
         .update_subtitle_entries(&shifted_timespans)
-        .with_context(|_| TopLevelErrorKind::FailedToUpdateSubtitle)?;
+        .map_err(|_| TopLevelError::FailedToUpdateSubtitle)?;
 
     write_data_to_file(
         &args.output_file_path,
         correct_file
             .to_data()
-            .with_context(|_| TopLevelErrorKind::FailedToGenerateSubtitleData)?,
+            .map_err(|_| TopLevelError::FailedToGenerateSubtitleData)?,
     )?;
 
     Ok(())
-}
-
-// //////////////////////////////////////////////////////////////////////////////////////////////////
-
-fn main() {
-    match run() {
-        Ok(_) => std::process::exit(0),
-        Err(error) => {
-            print_error_chain(error);
-            std::process::exit(1)
-        }
-    }
 }
