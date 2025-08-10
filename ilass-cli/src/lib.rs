@@ -13,8 +13,8 @@ use subparse::{SubtitleFile, get_subtitle_format_err, parse_bytes};
 use errors::*;
 
 pub mod args;
+pub mod decode;
 pub mod errors;
-pub mod video_decoder;
 
 pub struct NoProgressInfo {}
 
@@ -24,7 +24,7 @@ impl ilass::ProgressHandler for NoProgressInfo {
     fn finish(&mut self) {}
 }
 
-impl video_decoder::ProgressHandler for NoProgressInfo {
+impl decode::ProgressHandler for NoProgressInfo {
     fn init(&mut self, _steps: i64) {}
     fn inc(&mut self) {}
     fn finish(&mut self) {}
@@ -81,7 +81,7 @@ impl ilass::ProgressHandler for ProgressInfo {
     }
 }
 
-impl video_decoder::ProgressHandler for ProgressInfo {
+impl decode::ProgressHandler for ProgressInfo {
     fn init(&mut self, steps: i64) {
         self.init(steps)
     }
@@ -241,9 +241,8 @@ impl VideoFileHandler {
     pub fn open_video_file(
         file_path: &Path,
         audio_index: Option<usize>,
-        video_decode_progress: impl video_decoder::ProgressHandler,
+        video_decode_progress: impl decode::ProgressHandler,
     ) -> Result<VideoFileHandler, InputVideoError> {
-        //video_decoder::VideoDecoder::decode(file_path, );
         use webrtc_vad::*;
 
         struct WebRtcFvad {
@@ -251,13 +250,13 @@ impl VideoFileHandler {
             vad_buffer: Vec<bool>,
         }
 
-        impl video_decoder::AudioReceiver for WebRtcFvad {
+        impl decode::AudioReceiver for WebRtcFvad {
             type Output = Vec<bool>;
             type Error = InputVideoError;
 
             fn push_samples(&mut self, samples: &[i16]) -> Result<(), InputVideoError> {
                 // the chunked audio receiver should only provide 10ms of 8000kHz -> 80 samples
-                assert!(samples.len() == 80);
+                assert_eq!(samples.len(), 80);
 
                 let is_voice = self
                     .fvad
@@ -279,13 +278,12 @@ impl VideoFileHandler {
             vad_buffer: Vec::new(),
         };
 
-        let chunk_processor = video_decoder::ChunkedAudioReceiver::new(80, vad_processor);
+        let chunk_processor = decode::ChunkedAudioReceiver::new(80, vad_processor);
 
-        let vad_buffer =
-            video_decoder::VideoDecoder::decode(file_path, audio_index, chunk_processor, video_decode_progress)
-                .with_context(|_| InputVideoErrorKind::FailedToDecode {
-                    path: PathBuf::from(file_path),
-                })?;
+        let vad_buffer = decode::VideoDecoder::decode(file_path, audio_index, chunk_processor, video_decode_progress)
+            .with_context(|_| InputVideoErrorKind::FailedToDecode {
+            path: PathBuf::from(file_path),
+        })?;
 
         let mut voice_segments: Vec<(i64, i64)> = Vec::new();
         let mut voice_segment_start = 0;
@@ -321,7 +319,6 @@ impl VideoFileHandler {
             .collect();
 
         Ok(VideoFileHandler {
-            //video_file_format: VideoFileFormat::NotImplemented,
             subparse_timespans,
         })
     }
@@ -346,7 +343,7 @@ impl InputFileHandler {
         audio_index: Option<usize>,
         sub_encoding: Option<&'static Encoding>,
         sub_fps: f64,
-        video_decode_progress: impl video_decoder::ProgressHandler,
+        video_decode_progress: impl decode::ProgressHandler,
     ) -> Result<InputFileHandler, InputFileError> {
         if let Some(extension) = file_path.extension().map(|os_str| os_str.to_string_lossy()) {
             let known_extensions = ["srt", "vob", "idx", "ass", "ssa", "sub"];
