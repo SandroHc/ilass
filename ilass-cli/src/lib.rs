@@ -243,7 +243,6 @@ impl VideoFileHandler {
         audio_index: Option<usize>,
         video_decode_progress: impl video_decoder::ProgressHandler,
     ) -> Result<VideoFileHandler, InputVideoError> {
-        //video_decoder::VideoDecoder::decode(file_path, );
         use webrtc_vad::*;
 
         struct WebRtcFvad {
@@ -257,7 +256,7 @@ impl VideoFileHandler {
 
             fn push_samples(&mut self, samples: &[i16]) -> Result<(), InputVideoError> {
                 // the chunked audio receiver should only provide 10ms of 8000kHz -> 80 samples
-                assert!(samples.len() == 80);
+                assert_eq!(samples.len(), 80);
 
                 let is_voice = self
                     .fvad
@@ -319,7 +318,6 @@ impl VideoFileHandler {
             .collect();
 
         Ok(VideoFileHandler {
-            //video_file_format: VideoFileFormat::NotImplemented,
             subparse_timespans,
         })
     }

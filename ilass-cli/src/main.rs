@@ -287,7 +287,7 @@ fn run() -> Result<(), failure::Error> {
         println!("this can be used as a debugging tool");
         println!();
 
-        let lines: Vec<(subparse::timetypes::TimeSpan, String)> = ref_file
+        let lines: Vec<(TimeSpan, String)> = ref_file
             .timespans()
             .iter()
             .cloned()
@@ -331,10 +331,10 @@ fn run() -> Result<(), failure::Error> {
 
     let mut fps_scaling_factor = 1.;
     if args.guess_fps_ratio {
-        let a = 25.;
-        let b = 24.;
-        let c = 23.976;
-        let ratios = [a / b, a / c, b / a, b / c, c / a, c / b];
+        let fps25 = 25.;
+        let fps24 = 24.;
+        let fps23 = 23.976;
+        let ratios = [fps25 / fps24, fps25 / fps23, fps24 / fps25, fps24 / fps23, fps23 / fps25, fps23 / fps24];
         let desc = ["25/24", "25/23.976", "24/25", "24/23.976", "23.976/25", "23.976/24"];
 
         let (opt_ratio_idx, _) = guess_fps_ratio(

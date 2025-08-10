@@ -15,23 +15,18 @@ name = "ilass"
 path = "src/main.rs"
 
 [features]
-default = ["ffmpeg-binary"]
-
-# use exactly one of these two features
-ffmpeg-binary = ["byteorder"] 
-ffmpeg-library = ["ffmpeg-sys"]
+default = []
+static = ["ffmpeg-next/static"]
 
 [dependencies]
 ilass.workspace = true
 webrtc-vad = "0.4"
 subparse = "0.7"
 
-byteorder = { version = "1.5", optional = true }
 clap = { version = "4.5", features = ["cargo"] }
 encoding_rs = "0.8"
 failure = "0.1"
-ffmpeg-sys = { optional = true, git = "https://github.com/meh/rust-ffmpeg-sys", rev = "8e674faff68cb9fc5e064901133931c1c46b6c41" }
-libc = "0.2"
+ffmpeg-next = { version = "7.1", default-features = false, features = ["codec", "format", "software-resampling"] }
 pbr = "1.1"
 serde = { version = "1.0.98", features = ["derive", "rc"] }
 serde_json = "1.0"
