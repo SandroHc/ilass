@@ -4,6 +4,7 @@ use crate::define_error;
 use failure::{Backtrace, Context, Fail, ResultExt};
 use ffmpeg_next::software::resampling;
 use ffmpeg_next::{channel_layout, codec, decoder, format, frame, media};
+use ilass::ProgressHandler;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
@@ -64,23 +65,6 @@ impl<R: AudioReceiver> AudioReceiver for ChunkedAudioReceiver<R> {
     fn finish(self) -> Result<R::Output, R::Error> {
         self.next.finish()
     }
-}
-
-/// Use this trait if you want more detailed information about the progress of operations.
-pub trait ProgressHandler {
-    /// Will be called one time before `inc()` is called. `steps` is the
-    /// number of times `inc()` will be called.
-    ///
-    /// The number of steps is around the number of lines in the "incorrect" subtitle.
-    /// Be aware that this number can be zero!
-    #[allow(unused_variables)]
-    fn init(&mut self, steps: i64) {}
-
-    /// We made (small) progress!
-    fn inc(&mut self) {}
-
-    /// Will be called after the last `inc()`, when `inc()` was called `steps` times.
-    fn finish(&mut self) {}
 }
 
 define_error!(DecoderError, DecoderErrorKind);

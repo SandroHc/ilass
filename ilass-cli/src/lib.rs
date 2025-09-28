@@ -24,12 +24,6 @@ impl ilass::ProgressHandler for NoProgressInfo {
     fn finish(&mut self) {}
 }
 
-impl decode::ProgressHandler for NoProgressInfo {
-    fn init(&mut self, _steps: i64) {}
-    fn inc(&mut self) {}
-    fn finish(&mut self) {}
-}
-
 pub struct ProgressInfo {
     init_msg: Option<String>,
     prescaler: i64,
@@ -70,18 +64,6 @@ impl ProgressInfo {
 }
 
 impl ilass::ProgressHandler for ProgressInfo {
-    fn init(&mut self, steps: i64) {
-        self.init(steps)
-    }
-    fn inc(&mut self) {
-        self.inc()
-    }
-    fn finish(&mut self) {
-        self.finish()
-    }
-}
-
-impl decode::ProgressHandler for ProgressInfo {
     fn init(&mut self, steps: i64) {
         self.init(steps)
     }
@@ -241,7 +223,7 @@ impl VideoFileHandler {
     pub fn open_video_file(
         file_path: &Path,
         audio_index: Option<usize>,
-        video_decode_progress: impl decode::ProgressHandler,
+        video_decode_progress: impl ilass::ProgressHandler,
     ) -> Result<VideoFileHandler, InputVideoError> {
         use webrtc_vad::*;
 
@@ -343,7 +325,7 @@ impl InputFileHandler {
         audio_index: Option<usize>,
         sub_encoding: Option<&'static Encoding>,
         sub_fps: f64,
-        video_decode_progress: impl decode::ProgressHandler,
+        video_decode_progress: impl ilass::ProgressHandler,
     ) -> Result<InputFileHandler, InputFileError> {
         if let Some(extension) = file_path.extension().map(|os_str| os_str.to_string_lossy()) {
             let known_extensions = ["srt", "vob", "idx", "ass", "ssa", "sub"];
