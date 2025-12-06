@@ -10,6 +10,7 @@ use std::result::Result;
 
 use errors::*;
 
+pub mod args;
 pub mod errors;
 pub mod video_decoder;
 
