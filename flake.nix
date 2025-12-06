@@ -34,8 +34,8 @@
         packages = with pkgs; [
           rustToolchain
           pkg-config
-          cargo-deny
           cargo-edit
+          cargo-insta
           cargo-watch
           rust-analyzer
 

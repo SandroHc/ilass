@@ -1,10 +1,10 @@
-target
-!.gitignore
-*.ass
-*.srt
-*.svg
-data
-*.rs.bk
-videos.list
-generated-data
-test_data
+# Rust
+# Reference: https://github.com/github/gitignore/blob/main/Rust.gitignore
+/debug/
+/target/
+**/*.rs.bk
+*.pdb
+**/mutants.out*/
+
+# ilass runtime
+# ...

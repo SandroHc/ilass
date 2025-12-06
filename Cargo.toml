@@ -17,3 +17,7 @@ ilass = { path = "ilass", version = "2.1.0" }
 lto = true
 codegen-units = 1
 opt-level = 3
+
+[profile.dev.package]
+insta.opt-level = 3
+similar.opt-level = 3

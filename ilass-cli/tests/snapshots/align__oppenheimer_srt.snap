@@ -1,0 +1,53 @@
+---
+source: ilass-cli/tests/align.rs
+expression: "align(\"oppenheimer.in.srt\", \"oppenheimer.ref.srt\")"
+---
+1
+00:00:00,625 --> 00:00:04,064
+We knew the world
+would not be the same.
+
+2
+00:00:05,845 --> 00:00:09,064
+Few people laughed.
+
+3
+00:00:09,965 --> 00:00:11,124
+Few people cried.
+
+4
+00:00:12,165 --> 00:00:15,504
+Most people were silent.
+
+5
+00:00:17,085 --> 00:00:20,953
+I remembered the line
+from the Hindu scripture,
+
+6
+00:00:20,965 --> 00:00:23,824
+the Bhagavad Gita.
+
+7
+00:00:25,665 --> 00:00:26,364
+Vishnu
+
+8
+00:00:28,785 --> 00:00:34,134
+is trying to persuade the
+prince that he should do his
+
+9
+00:00:34,145 --> 00:00:42,233
+duty and to impress him, takes
+on his multi-armed form and
+
+10
+00:00:42,244 --> 00:00:50,393
+says, "Now, I am become death,
+the destroyer of worlds."
+
+11
+00:00:50,404 --> 00:00:53,324
+I suppose we all thought
+that one way or another.

@@ -168,7 +168,7 @@ mod tests {
                 .count();
 
             // test mapping from "overlapping -> non-overlapping"
-            assert!(time_spans.len() == indices.len());
+            assert_eq!(time_spans.len(), indices.len());
             for (i, span) in time_spans.iter().cloned().enumerate() {
                 assert!(non_overlapping[indices[i]].contains(span) || span.len() == TimeDelta::zero());
             }

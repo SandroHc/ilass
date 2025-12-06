@@ -54,6 +54,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Install FFmpeg, needed for the integration tests
+      - name: Install FFmpeg (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+      - name: Install FFmpeg (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg
+      - name: Install FFmpeg (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg -y
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
