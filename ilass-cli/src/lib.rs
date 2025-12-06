@@ -7,15 +7,14 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::result::Result;
+use subparse::timetypes::{TimeDelta as SubTimeDelta, TimePoint as SubTimePoint, TimeSpan as SubTimeSpan};
+use subparse::{SubtitleFile, get_subtitle_format_err, parse_bytes};
 
 use errors::*;
 
 pub mod args;
 pub mod errors;
 pub mod video_decoder;
-
-use subparse::timetypes::*;
-use subparse::{SubtitleFile, get_subtitle_format_err, parse_bytes};
 
 pub struct NoProgressInfo {}
 
@@ -116,18 +115,18 @@ pub fn write_data_to_file(path: &Path, d: Vec<u8>) -> Result<(), FileOperationEr
     Ok(())
 }
 
-pub fn timing_to_alg_timepoint(t: TimePoint, interval: i64) -> AlgTimePoint {
+pub fn timing_to_alg_timepoint(t: SubTimePoint, interval: i64) -> AlgTimePoint {
     assert!(interval > 0);
     AlgTimePoint::from(t.msecs() / interval)
 }
 
-pub fn alg_delta_to_delta(t: AlgTimeDelta, interval: i64) -> TimeDelta {
+pub fn alg_delta_to_delta(t: AlgTimeDelta, interval: i64) -> SubTimeDelta {
     assert!(interval > 0);
     let time_int: i64 = t.into();
-    TimeDelta::from_msecs(time_int * interval)
+    SubTimeDelta::from_msecs(time_int * interval)
 }
 
-pub fn timings_to_alg_timespans(v: &[TimeSpan], interval: i64) -> Vec<AlgTimeSpan> {
+pub fn timings_to_alg_timespans(v: &[SubTimeSpan], interval: i64) -> Vec<AlgTimeSpan> {
     v.iter()
         .cloned()
         .map(|timespan| {
@@ -139,15 +138,15 @@ pub fn timings_to_alg_timespans(v: &[TimeSpan], interval: i64) -> Vec<AlgTimeSpa
         .collect()
 }
 
-pub fn alg_deltas_to_timing_deltas(v: &[AlgTimeDelta], interval: i64) -> Vec<TimeDelta> {
+pub fn alg_deltas_to_timing_deltas(v: &[AlgTimeDelta], interval: i64) -> Vec<SubTimeDelta> {
     v.iter().cloned().map(|x| alg_delta_to_delta(x, interval)).collect()
 }
 
 /// Groups consecutive timespans with the same delta together.
-pub fn get_subtitle_delta_groups(mut v: Vec<(AlgTimeDelta, TimeSpan)>) -> Vec<(AlgTimeDelta, Vec<TimeSpan>)> {
+pub fn get_subtitle_delta_groups(mut v: Vec<(AlgTimeDelta, SubTimeSpan)>) -> Vec<(AlgTimeDelta, Vec<SubTimeSpan>)> {
     v.sort_by_key(|t| min((t.1).start, (t.1).end));
 
-    let mut result: Vec<(AlgTimeDelta, Vec<TimeSpan>)> = Vec::new();
+    let mut result: Vec<(AlgTimeDelta, Vec<SubTimeSpan>)> = Vec::new();
 
     for (delta, original_timespan) in v {
         let mut new_block = false;
@@ -178,7 +177,7 @@ pub enum InputFileHandler {
 pub struct SubtitleFileHandler {
     file_format: subparse::SubtitleFormat,
     subtitle_file: SubtitleFile,
-    subparse_timespans: Vec<TimeSpan>,
+    subparse_timespans: Vec<SubTimeSpan>,
 }
 
 impl SubtitleFileHandler {
@@ -196,13 +195,13 @@ impl SubtitleFileHandler {
         let parsed_subtitle_data: SubtitleFile = parse_bytes(file_format, &sub_data, sub_encoding, sub_fps)
             .with_context(|_| InputSubtitleErrorKind::ParsingSubtitleFailed(file_path.to_path_buf()))?;
 
-        let subparse_timespans: Vec<TimeSpan> = parsed_subtitle_data
+        let subparse_timespans: Vec<SubTimeSpan> = parsed_subtitle_data
             .get_subtitle_entries()
             .with_context(|_| InputSubtitleErrorKind::RetrievingSubtitleLinesFailed(file_path.to_path_buf()))?
             .into_iter()
             .map(|subentry| subentry.timespan)
-            .map(|timespan: TimeSpan| {
-                TimeSpan::new(min(timespan.start, timespan.end), max(timespan.start, timespan.end))
+            .map(|timespan: SubTimeSpan| {
+                SubTimeSpan::new(min(timespan.start, timespan.end), max(timespan.start, timespan.end))
             })
             .collect();
 
@@ -217,7 +216,7 @@ impl SubtitleFileHandler {
         self.file_format
     }
 
-    pub fn timespans(&self) -> &[TimeSpan] {
+    pub fn timespans(&self) -> &[SubTimeSpan] {
         self.subparse_timespans.as_slice()
     }
 
@@ -228,12 +227,12 @@ impl SubtitleFileHandler {
 
 pub struct VideoFileHandler {
     //video_file_format: VideoFileFormat,
-    subparse_timespans: Vec<TimeSpan>,
+    subparse_timespans: Vec<SubTimeSpan>,
     //aligner_timespans: Vec<ilass::TimeSpan>,
 }
 
 impl VideoFileHandler {
-    pub fn from_cache(timespans: Vec<TimeSpan>) -> VideoFileHandler {
+    pub fn from_cache(timespans: Vec<SubTimeSpan>) -> VideoFileHandler {
         VideoFileHandler {
             subparse_timespans: timespans,
         }
@@ -314,9 +313,11 @@ impl VideoFileHandler {
             }
         }
 
-        let subparse_timespans: Vec<TimeSpan> = voice_segments
+        let subparse_timespans: Vec<SubTimeSpan> = voice_segments
             .into_iter()
-            .map(|(start, end)| TimeSpan::new(TimePoint::from_msecs(start * 10), TimePoint::from_msecs(end * 10)))
+            .map(|(start, end)| {
+                SubTimeSpan::new(SubTimePoint::from_msecs(start * 10), SubTimePoint::from_msecs(end * 10))
+            })
             .collect();
 
         Ok(VideoFileHandler {
@@ -329,12 +330,12 @@ impl VideoFileHandler {
         self.subparse_timespans = self
             .subparse_timespans
             .iter()
-            .filter(|ts| ts.len() >= TimeDelta::from_msecs(min_vad_span_length_ms))
+            .filter(|ts| ts.len() >= SubTimeDelta::from_msecs(min_vad_span_length_ms))
             .cloned()
             .collect();
     }
 
-    pub fn timespans(&self) -> &[TimeSpan] {
+    pub fn timespans(&self) -> &[SubTimeSpan] {
         self.subparse_timespans.as_slice()
     }
 }
@@ -371,7 +372,7 @@ impl InputFileHandler {
         }
     }
 
-    pub fn timespans(&self) -> &[TimeSpan] {
+    pub fn timespans(&self) -> &[SubTimeSpan] {
         match self {
             InputFileHandler::Video(video_handler) => video_handler.timespans(),
             InputFileHandler::Subtitle(sub_handler) => sub_handler.timespans(),
@@ -392,13 +393,11 @@ pub fn guess_fps_ratio(
     mut progress_handler: impl ilass::ProgressHandler,
 ) -> (Option<usize>, ilass::TimeDelta) {
     progress_handler.init(ratios.len() as i64);
-    let (delta, score) = ilass::align_nosplit(ref_spans, in_spans, ilass::overlap_scoring, ilass::NoProgressHandler);
+    let (in_delta, in_score) =
+        ilass::align_nosplit(ref_spans, in_spans, ilass::overlap_scoring, ilass::NoProgressHandler);
     progress_handler.inc();
 
-    //let desc = ["25/24", "25/23.976", "24/25", "24/23.976", "23.976/25", "23.976/24"];
-    //println!("score 1: {}", score);
-
-    let (mut opt_idx, mut opt_delta, mut opt_score) = (None, delta, score);
+    let (mut best_idx, mut best_delta, mut best_score) = (None, in_delta, in_score);
 
     for (scale_factor_idx, scaling_factor) in ratios.iter().cloned().enumerate() {
         let stretched_in_spans: Vec<ilass::TimeSpan> = in_spans.iter().map(|ts| ts.scaled(scaling_factor)).collect();
@@ -411,18 +410,16 @@ pub fn guess_fps_ratio(
         );
         progress_handler.inc();
 
-        //println!("score {}: {}", desc[scale_factor_idx], score);
-
-        if score > opt_score {
-            opt_score = score;
-            opt_idx = Some(scale_factor_idx);
-            opt_delta = delta;
+        if score > best_score {
+            best_score = score;
+            best_idx = Some(scale_factor_idx);
+            best_delta = delta;
         }
     }
 
     progress_handler.finish();
 
-    (opt_idx, opt_delta)
+    (best_idx, best_delta)
 }
 
 pub fn print_error_chain(error: failure::Error) {
@@ -445,6 +442,6 @@ pub fn print_error_chain(error: failure::Error) {
 
     if !show_bt {
         println!();
-        println!("not: run with environment variable 'RUST_BACKTRACE=1' for detailed stack traces");
+        println!("note: run with environment variable 'RUST_BACKTRACE=1' for detailed stack traces");
     }
 }

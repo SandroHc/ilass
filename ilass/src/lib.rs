@@ -8,16 +8,12 @@
     unused_import_braces,
     unused_qualifications
 )]
-#![allow(unknown_lints)] // for clippy
 
-//! `ilass` takes two timespan arrays (e.g. from two subtitle files) and
+//! `ilass` takes two timespan arrays (e.g., from two subtitle files) and
 //! tries to align the `incorrect` subtitles
 //! to the `reference` subtitle. It automatically fixes offsets and
 //! introduces/removes breaks between subtitles in the `incorrect`
-//! subtitle to achive the best alignment.
-
-#[cfg(test)]
-extern crate rand;
+//! subtitle to achieve the best alignment.
 
 mod ilass;
 mod rating_type;
@@ -55,12 +51,11 @@ pub fn overlap_scoring(a: TimeDelta, b: TimeDelta) -> Score {
 }
 
 /// Matches an `incorrect` subtitle list to a `reference` subtitle list with only a single constant shift (no split).
+/// Returns the delta for every time span in `list`.
 ///
-/// Returns the delta for every time span in list.
+/// This function usually takes less than 300ms on 2h30min subtitle data.
 ///
-/// This function takes usually less than 300ms on 2h30min subtitle data.
-///
-/// Use `standard_scoring` as score function if no fine tuning is required.
+/// Use [`standard_scoring`] as the score function if no fine-tuning is required.
 pub fn align_nosplit(
     reference: &[TimeSpan],
     list: &[TimeSpan],
@@ -90,19 +85,19 @@ pub fn align_nosplit(
 ///
 /// The `split_penalty_normalized` is a value between
 /// 0 and 1000. Providing 0 will make the algorithm indifferent of splitting lines (resulting in MANY
-/// different deltas), so this is not recommended. Providing 1000 will assure that no split will occur,
+/// different deltas), so this is not recommended. Providing 1000 ensures that no split will occur,
 /// so only one/the best offset is applied to ALL lines. The most common useful values are in the
 /// 4 to 20 range (optimum 7+-1).
 ///
 /// Especially for larger subtitles (e.g. 1 hour in millisecond resolution and 1000 subtitle lines) this
-/// process might take some seconds. To provide user feedback one can pass a `ProgressHandler` to
+/// process might take some seconds. To provide user feedback, one can pass a `ProgressHandler` to
 /// this function.
 ///
 /// If you want to increase the speed of the alignment process, you can use the `speed_optimization`
-/// parameter. This value can be between `0` and `+inf`, altough after `10` the accuracy
+/// parameter. This value can be between `0` and `+inf`, although after `10` the accuracy
 /// will have greatly degraded. It is recommended to supply a value around `3`.
 ///
-/// Use `standard_scoring` as score function if no fine tuning is required.
+/// Use [`standard_scoring`] as the score function if no fine-tuning is required.
 pub fn align(
     reference: &[TimeSpan],
     list: &[TimeSpan],
@@ -130,7 +125,7 @@ pub fn align(
         progress_handler,
     );
 
-    // get deltas for overlapping timspan-list
+    // get deltas for overlapping timespan-list
     (
         list_indices.into_iter().map(|i| deltas[i]).collect(),
         score.as_readable_f64(),
@@ -141,7 +136,7 @@ pub fn align(
 pub fn get_split_rating(
     ref_spans: &[TimeSpan],
     in_spans: &[TimeSpan],
-    offets: &[TimeDelta],
+    offsets: &[TimeDelta],
     split_penalty: f64,
     score_fn: impl Fn(TimeDelta, TimeDelta) -> f64 + Copy,
 ) -> Score {
@@ -152,10 +147,10 @@ pub fn get_split_rating(
     total_rating = Rating::add_mul_usize(
         total_rating,
         -nosplit_bonus,
-        offets
+        offsets
             .iter()
             .cloned()
-            .zip(offets.iter().skip(1).cloned())
+            .zip(offsets.iter().skip(1).cloned())
             .filter(|(o1, o2)| o1 != o2)
             .count(),
     );

@@ -52,7 +52,7 @@ pub fn parse_args() -> Result<Arguments, InputArgumentsError> {
             .short('i')
             .long("interval")
             .value_name("integer in milliseconds")
-            .help("The smallest recognized time interval, smaller numbers make the alignment more accurate, greater numbers make aligning faster.")
+            .help("The smallest recognized time interval, smaller numbers make the alignment more accurate, greater numbers make alignment faster.")
             .default_value("1"))
         .arg(Arg::new("allow-negative-timestamps")
             .short('n')
