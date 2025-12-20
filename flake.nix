@@ -35,7 +35,7 @@
         devShells.default = pkgs.mkShell {
           nativeBuildInputs = with pkgs; [
             rustToolchain
-            cargo-edit
+            cargo-cross
             cargo-insta
             cargo-watch
 
@@ -45,10 +45,9 @@
 
             # project specific
             ffmpeg-full.dev
-
-            # Windows packaging
-            zip
-            unzip
+            lame # .mp3
+            libvorbis # .vorbis
+            opusfile # .opus
           ];
 
           buildInputs = with pkgs; [

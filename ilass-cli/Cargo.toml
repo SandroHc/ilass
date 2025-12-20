@@ -16,7 +16,14 @@ path = "src/main.rs"
 
 [features]
 default = []
-static = ["ffmpeg-next/static"]
+static = [
+    "ffmpeg-next/static",
+    "ffmpeg-next/build",
+    "ffmpeg-next/build-license-version3",
+#    "ffmpeg-next/build-lib-mp3lame", # .mp3
+#    "ffmpeg-next/build-lib-opus", # .opus
+#    "ffmpeg-next/build-lib-vorbis", # .ogg
+]
 
 [dependencies]
 ilass.workspace = true

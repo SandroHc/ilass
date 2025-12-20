@@ -7,117 +7,157 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-win-x86_64:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Get version
-        id: get_version
-        run: |
-          version=$(grep '^version = ' ./ilass-cli/Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
-          echo "version=$version" >> $GITHUB_OUTPUT
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-pc-windows-gnu
-
-      - name: Install cross-compilation dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y gcc-mingw-w64-x86-64
-
-      - name: Build
-        run: |
-          cargo build --release --bin ilass --target x86_64-pc-windows-gnu
-
-      - name: Package
-        run: |
-          # Create package structure
-          mkdir -p pkg
-
-          # Copy FFmpeg files
-          curl -L https://github.com/GyanD/codexffmpeg/releases/download/5.0/ffmpeg-5.0-essentials_build.zip -o target/ffmpeg.zip
-          unzip target/ffmpeg.zip -d target
-          cp target/ffmpeg-5.0-essentials_build/LICENSE pkg/LICENSE-ffmpeg
-          cp target/ffmpeg-5.0-essentials_build/bin/ffmpeg.exe pkg/ffmpeg.exe
-          cp target/ffmpeg-5.0-essentials_build/bin/ffprobe.exe pkg/ffprobe.exe
-
-          # Copy ilass files
-          cp LICENSE pkg/LICENSE-ilass
-          cp target/x86_64-pc-windows-gnu/release/ilass.exe pkg/ilass.exe
-
-          # Create batch script
-          echo -ne '@echo off\r\nset ILASS_FFMPEG_PATH=%~dp0ffmpeg.exe\r\nset ILASS_FFPROBE_PATH=%~dp0ffprobe.exe\r\n"%~dp0ilass.exe" %*\r\n' > pkg/ilass.bat
-
-          # Create zip archive
-          cd pkg && zip -r "ilass-${{ steps.get_version.outputs.version }}-win-x86_64.zip" .
-          mv *.zip ..
-
-      - name: Upload
-        uses: actions/upload-artifact@v4
-        with:
-          name: win-x86_64
-          path: ilass-${{ steps.get_version.outputs.version }}-win-x86_64.zip
-
-  build-linux-x86_64:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Get version
-        id: get_version
-        run: |
-          version=$(grep '^version = ' ./ilass-cli/Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
-          echo "version=$version" >> $GITHUB_OUTPUT
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-unknown-linux-musl
-
-      - name: Install musl tools
-        run: |
-          sudo apt update
-          sudo apt install -y musl-tools
-
-      - name: Build
-        run: |
-          cargo build --release --bin ilass --target x86_64-unknown-linux-musl
-
-      - name: Package
-        run: |
-          tar -czvf "ilass-${{ steps.get_version.outputs.version }}-linux-x86_64.tar.gz" --dir target/x86_64-unknown-linux-musl/release ilass
-
-      - name: Upload
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-x86_64
-          path: ilass-${{ steps.get_version.outputs.version }}-linux-x86_64.tar.gz
-
   release:
-    needs: [ build-win-x86_64, build-linux-x86_64 ]
-    runs-on: ubuntu-latest
+    name: ${{ matrix.platform.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: linux-x86_64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+
+          - name: linux-aarch64
+            os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+
+          - name: linux-riscv64
+            os: ubuntu-latest
+            target: riscv64gc-unknown-linux-gnu
+
+          - name: windows-x86_64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+
+          - name: windows-aarch64
+            os: windows-latest
+            target: aarch64-pc-windows-msvc
+
+          - name: macos-x86_64
+            os: macos-13
+            target: x86_64-apple-darwin
+
+          - name: macos-aarch64
+            os: macos-14
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.platform.os }}
     steps:
-      - name: Download Windows artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: win-x86_64
-          path: ./artifacts
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Download Linux artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: linux-x86_64
-          path: ./artifacts
+      - name: Install dependencies (Linux)
+        if: runner.os == 'macOS'
+        run: |
+          apt update
+          apt install nasm
 
-      - name: Create release
-        uses: softprops/action-gh-release@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew update
+          brew install ffmpeg lame
+
+      - name: Set up MSBuild (Windows)
+        if: runner.os == 'Windows'
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Configure MSVC (Windows)
+        if: |
+          runner.os == 'Windows' &&
+          (matrix.platform.target == 'x86_64-pc-windows-msvc' ||
+           matrix.platform.target == 'aarch64-pc-windows-msvc')
+        shell: powershell
+        run: |
+          $target = "${{ matrix.platform.target }}"
+          $vcvars_arch = ""
+          
+          if ($target -eq "x86_64-pc-windows-msvc") {
+            $vcvars_arch = "x64"
+            Write-Host "Running vcvarsall.bat x64 for x86_64 target..."
+          } elseif ($target -eq "aarch64-pc-windows-msvc") {
+            $vcvars_arch = "x64_arm64"
+            Write-Host "Running vcvarsall.bat x64_arm64 for aarch64 target..."
+          } else {
+            Write-Error "Unsupported Windows target for vcvarsall.bat: $target"
+            exit 1
+          }
+          
+          $scriptContent = @"
+          @echo off
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" $vcvars_arch >nul
+          set
+          "@
+          
+          $tempScriptPath = Join-Path $env:TEMP "run_vcvars.bat"
+          $scriptContent | Out-File $tempScriptPath -Encoding UTF8
+          
+          $vcvarsOutput = cmd.exe /c $tempScriptPath
+          
+          foreach ($line in $vcvarsOutput) {
+            if ($line -match "^(.+?)=(.*)$") {
+              $varName = $matches[1]
+              $varValue = $matches[2]
+              Add-Content -Path $Env:GITHUB_ENV -Value "$varName=$varValue"
+            }
+          }
+          Remove-Item $tempScriptPath
+
+      - name: Download FFmpeg (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $target = "${{ matrix.platform.target }}"
+          $ffmpeg_url = ""
+          $ffmpeg_archive_name = ""
+
+          if ($target -eq "x86_64-pc-windows-msvc") {
+            $ffmpeg_url = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2025-12-19-12-55/ffmpeg-n8.0.1-31-ge36046790a-win64-gpl-shared-8.0.zip'
+            $ffmpeg_archive_name = 'ffmpeg-x64.zip'
+            Write-Host "Downloading x64 FFmpeg..."
+          } elseif ($target -eq "aarch64-pc-windows-msvc") {
+            $ffmpeg_url = 'https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2025-12-19-12-55/ffmpeg-n8.0.1-31-ge36046790a-winarm64-gpl-shared-8.0.zip'
+            $ffmpeg_archive_name = 'ffmpeg-arm64.zip'
+            Write-Host "Downloading ARM64 FFmpeg..."
+          } else {
+            Write-Error "Unsupported Windows target: $target"
+            exit 1
+          }
+
+          $archive = Join-Path $Env:USERPROFILE $ffmpeg_archive_name
+          $dest    = Join-Path $Env:USERPROFILE 'ffmpeg'
+
+          Invoke-WebRequest $ffmpeg_url -OutFile $archive -MaximumRedirection 5
+          & (Join-Path $env:ProgramFiles '7-Zip\7z.exe') x $archive "-o$dest" -y
+          Remove-Item $archive
+
+          $dirs = Get-ChildItem $dest | Where-Object PSIsContainer
+          if ($dirs.Count -eq 1) {
+            Get-ChildItem $dirs[0].FullName | Move-Item -Destination $dest -Force
+            Remove-Item $dirs[0].FullName -Recurse -Force
+          }
+
+          Add-Content -Path $Env:GITHUB_ENV -Value "FFMPEG_DIR=$dest"
+          Add-Content -Path $Env:GITHUB_ENV -Value "INCLUDE=$dest\include;$Env:INCLUDE"
+          Add-Content -Path $Env:GITHUB_ENV -Value "LIB=$dest\lib;$Env:LIB"
+          Add-Content -Path $Env:GITHUB_ENV -Value "PATH=$dest\bin;$Env:PATH"
+
+      - name: Build
+        uses: houseabsolute/actions-rust-cross@v1
         with:
-          draft: true
-          files: ./artifacts/*
+          command: build
+          target: ${{ matrix.platform.target }}
+          args: "--release --features static --bin ilass"
+#          strip: true
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ilass-${{ matrix.platform.target }}
+          path: target/${{ matrix.platform.target }}/release/ilass*
+
+      - name: Release
+        uses: houseabsolute/actions-rust-release@v0
+        with:
+          executable-name: ilass
+          target: ${{ matrix.platform.target }}
+          changes-file: ""

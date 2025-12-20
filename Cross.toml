@@ -1,0 +1,17 @@
+[target.x86_64-unknown-linux-gnu]
+pre-build = [
+    "apt update",
+    "apt install -y pkg-config nasm"
+]
+
+[target.aarch64-unknown-linux-gnu]
+pre-build = [
+    "apt update",
+    "apt install -y pkg-config",
+]
+
+[target.riscv64gc-unknown-linux-gnu]
+pre-build = [
+    "apt update",
+    "apt install -y pkg-config",
+]
