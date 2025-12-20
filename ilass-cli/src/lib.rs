@@ -300,9 +300,7 @@ impl VideoFileHandler {
             })
             .collect();
 
-        Ok(VideoFileHandler {
-            subparse_timespans,
-        })
+        Ok(VideoFileHandler { subparse_timespans })
     }
 
     pub fn filter_with_min_span_length_ms(&mut self, min_vad_span_length_ms: i64) {
